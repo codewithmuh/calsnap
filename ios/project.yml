@@ -1,0 +1,35 @@
+name: CalSnap
+options:
+  bundleIdPrefix: com.codewithmuh
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+targets:
+  CalSnap:
+    type: application
+    platform: iOS
+    sources:
+      - CalSnap
+    info:
+      path: CalSnap/Info.plist
+      properties:
+        CFBundleDisplayName: CalSnap
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSCameraUsageDescription: "CalSnap uses the camera to snap photos of your meals so Claude can estimate calories."
+        NSPhotoLibraryUsageDescription: "CalSnap reads meal photos from your library so Claude can estimate calories."
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.codewithmuh.calsnap
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
