@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Django
+*.sqlite3
+backend/media/
+backend/staticfiles/
+
+# Secrets
+.env
+
+# macOS
+.DS_Store
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/**/DerivedData/
+*.xcuserdatad/
+build/
