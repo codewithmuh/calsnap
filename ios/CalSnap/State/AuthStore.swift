@@ -41,8 +41,15 @@ final class AuthStore {
     }
 
     func refreshProfile() async {
-        guard let user = try? await APIClient.shared.me() else { return }
-        currentUser = user
+        do {
+            currentUser = try await APIClient.shared.me()
+        } catch APIError.unauthorized {
+            // Token is stale/invalid (e.g. server DB was reset) — drop back to guest
+            // instead of sitting in a broken "logged in" state.
+            logout()
+        } catch {
+            // Transient error — keep the session; the user can retry.
+        }
     }
 
     func applyUpdatedUser(_ user: AuthUser) {

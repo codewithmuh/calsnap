@@ -151,14 +151,16 @@ struct APIClient {
         guard let http = response as? HTTPURLResponse else { throw APIError.unknown }
 
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 { throw APIError.unauthorized }
-            // Try to surface {"detail": "..."} from DRF.
+            // Prefer the server's own {"detail": "..."} (e.g. DRF's
+            // "Invalid email or password.") over a generic status message.
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 if let detail = obj["detail"] as? String { throw APIError.server(detail) }
                 if let first = obj.values.first as? [String], let msg = first.first {
                     throw APIError.server(msg)
                 }
             }
+            // No usable body — fall back to a friendly message.
+            if http.statusCode == 401 { throw APIError.unauthorized }
             throw APIError.server("Request failed (\(http.statusCode)).")
         }
         return data
