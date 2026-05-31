@@ -3,15 +3,30 @@ from datetime import datetime, timedelta
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.generics import ListCreateAPIView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .claude import ClaudeError, analyze_meal
 from .models import Meal
 from .serializers import MealSerializer
+
+
+def _to_int(value, default=0):
+    try:
+        return max(0, int(round(float(value))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_float(value, default=0.0):
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return default
 
 
 class MealListCreateView(ListCreateAPIView):
@@ -33,15 +48,32 @@ class MealListCreateView(ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         image = request.FILES.get("image")
+        note = request.data.get("note", "")
+
+        # Pre-analyzed save: the client already ran /api/analyze/ (or is migrating
+        # guest meals) and sends the nutrition values, so we skip Claude here.
+        if request.data.get("food_name") and request.data.get("calories") is not None:
+            meal = Meal.objects.create(
+                user=request.user,
+                image=image if image is not None else None,
+                food_name=str(request.data["food_name"])[:200],
+                calories=_to_int(request.data.get("calories")),
+                protein=_to_int(request.data.get("protein")),
+                carbs=_to_int(request.data.get("carbs")),
+                fat=_to_int(request.data.get("fat")),
+                confidence=_to_float(request.data.get("confidence")),
+                note=note,
+            )
+            return Response(self.get_serializer(meal).data, status=status.HTTP_201_CREATED)
+
+        # Legacy path: image only -> run Claude, then save.
         if image is None:
             return Response(
                 {"detail": "An 'image' file is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        note = request.data.get("note", "")
         image_bytes = image.read()
-
         try:
             result = analyze_meal(image_bytes, note=note)
         except ClaudeError as exc:
@@ -101,3 +133,36 @@ def weekly_stats(request):
 
     goal = request.user.daily_calorie_goal
     return Response({"goal": goal, "days": days})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@parser_classes([MultiPartParser, FormParser])
+def analyze(request):
+    """Anonymous: image -> Claude -> nutrition JSON. Nothing is saved.
+
+    Powers guest mode — the camera -> Claude moneyshot works without an account.
+    The app saves the result locally (guest) or POSTs it to /api/meals/ (logged in).
+    """
+    image = request.FILES.get("image")
+    if image is None:
+        return Response(
+            {"detail": "An 'image' file is required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    note = request.data.get("note", "")
+    try:
+        result = analyze_meal(image.read(), note=note)
+    except ClaudeError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+    # Return field names matching the iOS Meal/Analysis shape (snake_case).
+    return Response({
+        "food_name": result["food"],
+        "calories": result["calories"],
+        "protein": result["protein_g"],
+        "carbs": result["carbs_g"],
+        "fat": result["fat_g"],
+        "confidence": result["confidence"],
+    })

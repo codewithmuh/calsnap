@@ -1,23 +1,14 @@
 import SwiftUI
 
+/// The app opens straight into the home screen — login is optional and can
+/// happen later (from the Today banner or Settings).
 struct RootView: View {
-    @Environment(AuthStore.self) private var auth
-
     var body: some View {
-        Group {
-            if auth.isAuthenticated {
-                MainTabView()
-            } else {
-                AuthView()
-            }
-        }
-        .animation(.easeInOut, value: auth.isAuthenticated)
+        MainTabView()
     }
 }
 
 struct MainTabView: View {
-    @State private var mealStore = MealStore()
-
     var body: some View {
         TabView {
             TodayView()
@@ -29,6 +20,5 @@ struct MainTabView: View {
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }
-        .environment(mealStore)
     }
 }

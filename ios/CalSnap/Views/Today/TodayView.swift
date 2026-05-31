@@ -5,15 +5,18 @@ struct TodayView: View {
     @Environment(MealStore.self) private var meals
 
     @State private var showingSnap = false
-
-    private var goal: Int { auth.currentUser?.dailyCalorieGoal ?? 2000 }
+    @State private var showingLogin = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    CalorieRing(consumed: meals.consumedCalories, goal: goal)
-                        .padding(.top, 8)
+                    if !auth.isAuthenticated {
+                        guestBanner
+                    }
+
+                    CalorieRing(consumed: meals.consumedCalories, goal: meals.goal)
+                        .padding(.top, 4)
 
                     MacroSummary(
                         protein: meals.consumedProtein,
@@ -31,10 +34,31 @@ struct TodayView: View {
             .navigationTitle("Today")
             .refreshable { await meals.loadToday() }
             .task { await meals.loadToday() }
-            .sheet(isPresented: $showingSnap) {
-                SnapFlowView()
-            }
+            .sheet(isPresented: $showingSnap) { SnapFlowView() }
+            .sheet(isPresented: $showingLogin) { AuthView() }
         }
+    }
+
+    private var guestBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.crop.circle.badge.questionmark")
+                .font(.title3)
+                .foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("You're using CalSnap as a guest")
+                    .font(.subheadline.weight(.semibold))
+                Text("Meals are saved on this device. Log in to sync.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Log in") { showingLogin = true }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal)
     }
 
     private var snapButton: some View {
@@ -53,9 +77,9 @@ struct TodayView: View {
 
     @ViewBuilder
     private var mealsSection: some View {
-        if meals.isLoading && meals.todayMeals.isEmpty {
+        if meals.isLoading && meals.items.isEmpty {
             ProgressView().padding(.top, 40)
-        } else if meals.todayMeals.isEmpty {
+        } else if meals.items.isEmpty {
             ContentUnavailableView(
                 "No meals yet",
                 systemImage: "fork.knife",
@@ -67,8 +91,8 @@ struct TodayView: View {
                 Text("Today's meals")
                     .font(.headline)
                     .padding(.horizontal)
-                ForEach(meals.todayMeals) { meal in
-                    MealRow(meal: meal)
+                ForEach(meals.items) { item in
+                    MealRow(item: item)
                         .padding(.horizontal)
                 }
             }
@@ -101,31 +125,24 @@ struct MacroSummary: View {
 }
 
 struct MealRow: View {
-    let meal: Meal
+    let item: MealItem
     @Environment(MealStore.self) private var meals
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: meal.imageUrl.flatMap(URL.init)) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFill()
-                } else {
-                    Color(.systemGray6)
-                        .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
-                }
-            }
-            .frame(width: 56, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            thumbnail
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(meal.foodName).font(.subheadline.weight(.semibold)).lineLimit(1)
-                Text("P \(meal.protein) · C \(meal.carbs) · F \(meal.fat)")
+                Text(item.foodName).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text("P \(item.protein) · C \(item.carbs) · F \(item.fat)")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            Text("\(meal.calories)")
+            Text("\(item.calories)")
                 .font(.headline.monospacedDigit())
                 + Text(" kcal").font(.caption).foregroundColor(.secondary)
         }
@@ -133,17 +150,39 @@ struct MealRow: View {
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
         .swipeActions {
             Button(role: .destructive) {
-                Task { await meals.delete(meal) }
+                Task { await meals.delete(item) }
             } label: {
                 Label("Delete", systemImage: "trash")
             }
         }
         .contextMenu {
             Button(role: .destructive) {
-                Task { await meals.delete(meal) }
+                Task { await meals.delete(item) }
             } label: {
                 Label("Delete meal", systemImage: "trash")
             }
         }
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let data = item.imageData, let ui = UIImage(data: data) {
+            Image(uiImage: ui).resizable().scaledToFill()
+        } else if let url = item.imageURL {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFill()
+                } else {
+                    placeholder
+                }
+            }
+        } else {
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
+        Color(.systemGray6)
+            .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
     }
 }

@@ -69,33 +69,33 @@ struct APIClient {
         _ = try await perform(req, expectBody: false)
     }
 
-    /// Multipart upload: image (+ optional note) -> Claude-analyzed meal.
-    func createMeal(imageData: Data, note: String) async throws -> Meal {
-        let boundary = "calsnap-\(UUID().uuidString)"
-        var req = try request("POST", "/api/meals/", authed: true)
-        req.setValue("multipart/form-data; boundary=\(boundary)",
-                     forHTTPHeaderField: "Content-Type")
+    /// Anonymous: image (+ optional note) -> Claude nutrition estimate. Not saved.
+    /// Works without login — powers the guest-mode camera flow.
+    func analyze(imageData: Data, note: String) async throws -> Analysis {
+        var fields: [String: String] = [:]
+        if !note.isEmpty { fields["note"] = note }
+        let req = try multipartRequest(
+            "/api/analyze/", imageData: imageData, fields: fields, authed: false
+        )
+        return try decode(try await perform(req, expectBody: true))
+    }
 
-        var body = Data()
-        func append(_ s: String) { body.append(Data(s.utf8)) }
-
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"image\"; filename=\"meal.jpg\"\r\n")
-        append("Content-Type: image/jpeg\r\n\r\n")
-        body.append(imageData)
-        append("\r\n")
-
-        if !note.isEmpty {
-            append("--\(boundary)\r\n")
-            append("Content-Disposition: form-data; name=\"note\"\r\n\r\n")
-            append(note)
-            append("\r\n")
-        }
-        append("--\(boundary)--\r\n")
-        req.httpBody = body
-
-        let data = try await perform(req, expectBody: true)
-        return try decode(data)
+    /// Save a (already analyzed) meal to the logged-in account. Skips Claude on
+    /// the server. Used both for the normal save flow and for guest migration.
+    func createMeal(analysis: Analysis, imageData: Data?, note: String) async throws -> Meal {
+        let fields: [String: String] = [
+            "food_name": analysis.foodName,
+            "calories": String(analysis.calories),
+            "protein": String(analysis.protein),
+            "carbs": String(analysis.carbs),
+            "fat": String(analysis.fat),
+            "confidence": String(analysis.confidence),
+            "note": note,
+        ]
+        let req = try multipartRequest(
+            "/api/meals/", imageData: imageData, fields: fields, authed: true
+        )
+        return try decode(try await perform(req, expectBody: true))
     }
 
     // MARK: - Plumbing
@@ -108,6 +108,35 @@ struct APIClient {
             guard let token = Keychain.accessToken else { throw APIError.unauthorized }
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
+        return req
+    }
+
+    /// Build a multipart POST with an optional JPEG image and text fields.
+    private func multipartRequest(_ path: String, imageData: Data?,
+                                  fields: [String: String], authed: Bool) throws -> URLRequest {
+        let boundary = "calsnap-\(UUID().uuidString)"
+        var req = try request("POST", path, authed: authed)
+        req.setValue("multipart/form-data; boundary=\(boundary)",
+                     forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        func append(_ s: String) { body.append(Data(s.utf8)) }
+
+        if let imageData {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"image\"; filename=\"meal.jpg\"\r\n")
+            append("Content-Type: image/jpeg\r\n\r\n")
+            body.append(imageData)
+            append("\r\n")
+        }
+        for (name, value) in fields {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            append(value)
+            append("\r\n")
+        }
+        append("--\(boundary)--\r\n")
+        req.httpBody = body
         return req
     }
 

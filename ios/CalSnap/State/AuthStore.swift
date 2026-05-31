@@ -18,14 +18,16 @@ final class AuthStore {
         }
     }
 
-    func login(email: String, password: String) async {
+    @discardableResult
+    func login(email: String, password: String) async -> Bool {
         await run {
             let res = try await APIClient.shared.login(email: email, password: password)
             self.persist(res)
         }
     }
 
-    func register(email: String, password: String, goal: Int) async {
+    @discardableResult
+    func register(email: String, password: String, goal: Int) async -> Bool {
         await run {
             let res = try await APIClient.shared.register(email: email, password: password, goal: goal)
             self.persist(res)
@@ -56,14 +58,17 @@ final class AuthStore {
         isAuthenticated = true
     }
 
-    private func run(_ work: @escaping () async throws -> Void) async {
+    @discardableResult
+    private func run(_ work: @escaping () async throws -> Void) async -> Bool {
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
         do {
             try await work()
+            return true
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return false
         }
     }
 }

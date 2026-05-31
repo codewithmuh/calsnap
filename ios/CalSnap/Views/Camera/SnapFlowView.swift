@@ -2,6 +2,7 @@ import PhotosUI
 import SwiftUI
 
 /// The moneyshot: photo -> Claude -> calories appear -> save -> ring animates.
+/// Works in guest mode too — analysis is anonymous; saving goes local or to the account.
 struct SnapFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MealStore.self) private var meals
@@ -15,8 +16,9 @@ struct SnapFlowView: View {
 
     @State private var stage: Stage = .choose
     @State private var image: UIImage?
+    @State private var imageData: Data?
     @State private var note = ""
-    @State private var analyzed: Meal?
+    @State private var analysis: Analysis?
     @State private var errorMessage: String?
 
     @State private var photoItem: PhotosPickerItem?
@@ -42,7 +44,7 @@ struct SnapFlowView: View {
             }
             .fullScreenCover(isPresented: $showingCamera) {
                 CameraPicker { captured in
-                    image = captured
+                    setImage(captured)
                     stage = .preview
                 }
                 .ignoresSafeArea()
@@ -52,7 +54,7 @@ struct SnapFlowView: View {
                 Task {
                     if let data = try? await newItem.loadTransferable(type: Data.self),
                        let ui = UIImage(data: data) {
-                        image = ui
+                        setImage(ui)
                         stage = .preview
                     }
                 }
@@ -144,7 +146,7 @@ struct SnapFlowView: View {
 
     @ViewBuilder
     private var resultStage: some View {
-        if let analyzed {
+        if let analysis {
             ScrollView {
                 VStack(spacing: 18) {
                     if let image {
@@ -154,27 +156,26 @@ struct SnapFlowView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
 
-                    Text(analyzed.foodName)
+                    Text(analysis.foodName)
                         .font(.title2.bold())
                         .multilineTextAlignment(.center)
 
-                    Text("\(analyzed.calories)")
+                    Text("\(analysis.calories)")
                         .font(.system(size: 56, weight: .bold, design: .rounded))
                         .foregroundStyle(.tint)
                     + Text(" kcal").font(.title3).foregroundColor(.secondary)
 
                     HStack(spacing: 12) {
-                        macroPill("Protein", analyzed.protein, .blue)
-                        macroPill("Carbs", analyzed.carbs, .orange)
-                        macroPill("Fat", analyzed.fat, .purple)
+                        macroPill("Protein", analysis.protein, .blue)
+                        macroPill("Carbs", analysis.carbs, .orange)
+                        macroPill("Fat", analysis.fat, .purple)
                     }
 
-                    Text("Confidence: \(Int(analyzed.confidence * 100))%")
+                    Text("Confidence: \(Int(analysis.confidence * 100))%")
                         .font(.caption).foregroundStyle(.secondary)
 
                     Button {
-                        meals.add(analyzed)
-                        dismiss()
+                        save(analysis)
                     } label: {
                         Label("Save to today", systemImage: "checkmark.circle.fill")
                             .font(.headline)
@@ -202,14 +203,18 @@ struct SnapFlowView: View {
 
     // MARK: - Actions
 
+    private func setImage(_ ui: UIImage) {
+        image = ui
+        imageData = ui.jpegData(compressionQuality: 0.7)
+    }
+
     private func analyze() {
-        guard let image, let data = image.jpegData(compressionQuality: 0.7) else { return }
+        guard let imageData else { return }
         errorMessage = nil
         stage = .analyzing
         Task {
             do {
-                let meal = try await APIClient.shared.createMeal(imageData: data, note: note)
-                analyzed = meal
+                analysis = try await APIClient.shared.analyze(imageData: imageData, note: note)
                 stage = .result
             } catch {
                 errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -218,9 +223,17 @@ struct SnapFlowView: View {
         }
     }
 
+    private func save(_ analysis: Analysis) {
+        Task {
+            await meals.addAnalyzed(analysis, imageData: imageData, note: note)
+            dismiss()
+        }
+    }
+
     private func reset() {
         image = nil
-        analyzed = nil
+        imageData = nil
+        analysis = nil
         note = ""
         photoItem = nil
         errorMessage = nil
