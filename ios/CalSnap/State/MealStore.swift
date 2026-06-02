@@ -62,12 +62,12 @@ final class MealStore {
     // MARK: - Mutations
 
     /// Save an analyzed meal — to the account if logged in, else to local guest storage.
-    func addAnalyzed(_ analysis: Analysis, imageData: Data?, note: String) async {
+    func addAnalyzed(_ analysis: Analysis, mealType: MealType, imageData: Data?, note: String) async {
         errorMessage = nil
         if isAuthed {
             do {
                 let meal = try await APIClient.shared.createMeal(
-                    analysis: analysis, imageData: imageData, note: note
+                    analysis: analysis, mealType: mealType, imageData: imageData, note: note
                 )
                 items.insert(meal.asItem, at: 0)
             } catch {
@@ -75,7 +75,7 @@ final class MealStore {
                 return
             }
         } else {
-            let local = guest.add(analysis, imageData: imageData, note: note)
+            let local = guest.add(analysis, mealType: mealType, imageData: imageData, note: note)
             items.insert(local.asItem, at: 0)
         }
         await loadWeekly()
@@ -107,7 +107,8 @@ final class MealStore {
         let locals = guest.all()
         for meal in locals.reversed() {  // oldest first to roughly preserve order
             _ = try? await APIClient.shared.createMeal(
-                analysis: meal.analysis, imageData: meal.imageData, note: meal.note
+                analysis: meal.analysis, mealType: meal.mealType,
+                imageData: meal.imageData, note: meal.note
             )
         }
         guest.clearMeals()

@@ -87,14 +87,33 @@ struct TodayView: View {
             )
             .padding(.top, 24)
         } else {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 16) {
                 Text("Today's meals")
                     .font(.headline)
                     .padding(.horizontal)
-                ForEach(meals.items) { item in
-                    MealRow(item: item)
-                        .padding(.horizontal)
+                ForEach(MealType.allCases) { type in
+                    let group = meals.items.filter { $0.mealType == type }
+                    if !group.isEmpty {
+                        mealGroup(type, items: group)
+                    }
                 }
+            }
+        }
+    }
+
+    private func mealGroup(_ type: MealType, items: [MealItem]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(type.label, systemImage: type.icon)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(items.reduce(0) { $0 + $1.calories }) kcal")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal)
+            ForEach(items) { item in
+                MealRow(item: item)
+                    .padding(.horizontal)
             }
         }
     }

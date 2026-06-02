@@ -82,8 +82,9 @@ struct APIClient {
 
     /// Save a (already analyzed) meal to the logged-in account. Skips Claude on
     /// the server. Used both for the normal save flow and for guest migration.
-    func createMeal(analysis: Analysis, imageData: Data?, note: String) async throws -> Meal {
+    func createMeal(analysis: Analysis, mealType: MealType, imageData: Data?, note: String) async throws -> Meal {
         let fields: [String: String] = [
+            "meal_type": mealType.rawValue,
             "food_name": analysis.foodName,
             "calories": String(analysis.calories),
             "protein": String(analysis.protein),

@@ -22,6 +22,12 @@ def _to_int(value, default=0):
         return default
 
 
+def _meal_type(value, default=Meal.MealType.LUNCH):
+    valid = {choice[0] for choice in Meal.MealType.choices}
+    candidate = str(value or "").lower()
+    return candidate if candidate in valid else default
+
+
 def _to_float(value, default=0.0):
     try:
         return max(0.0, min(1.0, float(value)))
@@ -56,6 +62,7 @@ class MealListCreateView(ListCreateAPIView):
             meal = Meal.objects.create(
                 user=request.user,
                 image=image if image is not None else None,
+                meal_type=_meal_type(request.data.get("meal_type")),
                 food_name=str(request.data["food_name"])[:200],
                 calories=_to_int(request.data.get("calories")),
                 protein=_to_int(request.data.get("protein")),
@@ -87,6 +94,7 @@ class MealListCreateView(ListCreateAPIView):
         meal = Meal.objects.create(
             user=request.user,
             image=image,
+            meal_type=_meal_type(request.data.get("meal_type")),
             food_name=result["food"],
             calories=result["calories"],
             protein=result["protein_g"],

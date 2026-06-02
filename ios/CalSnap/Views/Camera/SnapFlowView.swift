@@ -18,6 +18,7 @@ struct SnapFlowView: View {
     @State private var image: UIImage?
     @State private var imageData: Data?
     @State private var note = ""
+    @State private var mealType: MealType = .current
     @State private var analysis: Analysis?
     @State private var errorMessage: String?
 
@@ -174,6 +175,8 @@ struct SnapFlowView: View {
                     Text("Confidence: \(Int(analysis.confidence * 100))%")
                         .font(.caption).foregroundStyle(.secondary)
 
+                    mealTypePicker
+
                     Button {
                         save(analysis)
                     } label: {
@@ -187,6 +190,36 @@ struct SnapFlowView: View {
                         .font(.subheadline)
                 }
                 .padding(.vertical)
+            }
+        }
+    }
+
+    private var mealTypePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Which meal is this?")
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                ForEach(MealType.allCases) { type in
+                    let selected = mealType == type
+                    Button {
+                        mealType = type
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: type.icon).font(.title3)
+                            Text(type.label).font(.caption.weight(.medium))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            selected ? AnyShapeStyle(.tint)
+                                     : AnyShapeStyle(Color(.secondarySystemBackground)),
+                            in: RoundedRectangle(cornerRadius: 12)
+                        )
+                        .foregroundStyle(selected ? .white : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
@@ -225,7 +258,7 @@ struct SnapFlowView: View {
 
     private func save(_ analysis: Analysis) {
         Task {
-            await meals.addAnalyzed(analysis, imageData: imageData, note: note)
+            await meals.addAnalyzed(analysis, mealType: mealType, imageData: imageData, note: note)
             dismiss()
         }
     }
@@ -235,6 +268,7 @@ struct SnapFlowView: View {
         imageData = nil
         analysis = nil
         note = ""
+        mealType = .current
         photoItem = nil
         errorMessage = nil
         stage = .choose

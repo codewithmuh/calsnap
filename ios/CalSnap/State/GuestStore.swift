@@ -30,8 +30,8 @@ struct GuestStore {
     }
 
     @discardableResult
-    func add(_ analysis: Analysis, imageData: Data?, note: String) -> LocalMeal {
-        let meal = LocalMeal(analysis: analysis, imageData: imageData, note: note, createdAt: Date())
+    func add(_ analysis: Analysis, mealType: MealType, imageData: Data?, note: String) -> LocalMeal {
+        let meal = LocalMeal(analysis: analysis, mealType: mealType, imageData: imageData, note: note, createdAt: Date())
         var meals = all()
         meals.insert(meal, at: 0)
         save(meals)

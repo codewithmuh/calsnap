@@ -26,9 +26,38 @@ struct Analysis: Codable, Hashable {
     let confidence: Double
 }
 
+/// Which meal of the day a logged item belongs to. Raw values match the
+/// Django `Meal.MealType` choices (sent/received as snake-case-safe lowercase).
+enum MealType: String, Codable, CaseIterable, Identifiable, Hashable {
+    case breakfast
+    case lunch
+    case dinner
+
+    var id: String { rawValue }
+    var label: String { rawValue.capitalized }
+
+    var icon: String {
+        switch self {
+        case .breakfast: return "sunrise.fill"
+        case .lunch:     return "sun.max.fill"
+        case .dinner:    return "moon.stars.fill"
+        }
+    }
+
+    /// Sensible default for the picker, based on the current time of day.
+    static var current: MealType {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 0..<11:  return .breakfast
+        case 11..<16: return .lunch
+        default:      return .dinner
+        }
+    }
+}
+
 /// A meal as returned by the server.
 struct Meal: Codable, Identifiable, Hashable {
     let id: Int
+    let mealType: MealType
     let foodName: String
     let calories: Int
     let protein: Int
@@ -47,6 +76,7 @@ struct Meal: Codable, Identifiable, Hashable {
 /// A meal logged in guest mode, persisted on-device only.
 struct LocalMeal: Codable, Identifiable, Hashable {
     var id: UUID
+    var mealType: MealType
     var foodName: String
     var calories: Int
     var protein: Int
@@ -57,8 +87,9 @@ struct LocalMeal: Codable, Identifiable, Hashable {
     var imageData: Data?
     var createdAt: Date
 
-    init(analysis: Analysis, imageData: Data?, note: String, createdAt: Date) {
+    init(analysis: Analysis, mealType: MealType, imageData: Data?, note: String, createdAt: Date) {
         self.id = UUID()
+        self.mealType = mealType
         self.foodName = analysis.foodName
         self.calories = analysis.calories
         self.protein = analysis.protein
@@ -74,6 +105,27 @@ struct LocalMeal: Codable, Identifiable, Hashable {
         Analysis(foodName: foodName, calories: calories, protein: protein,
                  carbs: carbs, fat: fat, confidence: confidence)
     }
+
+    // Custom decode so guest meals saved before meal_type existed still load
+    // (missing/unknown type falls back to .lunch instead of failing the whole file).
+    enum CodingKeys: String, CodingKey {
+        case id, mealType, foodName, calories, protein, carbs, fat, confidence, note, imageData, createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        mealType = (try? c.decode(MealType.self, forKey: .mealType)) ?? .lunch
+        foodName = try c.decode(String.self, forKey: .foodName)
+        calories = try c.decode(Int.self, forKey: .calories)
+        protein = try c.decode(Int.self, forKey: .protein)
+        carbs = try c.decode(Int.self, forKey: .carbs)
+        fat = try c.decode(Int.self, forKey: .fat)
+        confidence = try c.decode(Double.self, forKey: .confidence)
+        note = try c.decode(String.self, forKey: .note)
+        imageData = try c.decodeIfPresent(Data.self, forKey: .imageData)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+    }
 }
 
 /// Unified meal for display — comes from either the server or local guest storage.
@@ -84,6 +136,7 @@ struct MealItem: Identifiable, Hashable {
     }
 
     let source: Source
+    let mealType: MealType
     let foodName: String
     let calories: Int
     let protein: Int
@@ -117,6 +170,7 @@ extension Meal {
     var asItem: MealItem {
         MealItem(
             source: .server(id),
+            mealType: mealType,
             foodName: foodName, calories: calories, protein: protein,
             carbs: carbs, fat: fat, confidence: confidence, note: note,
             createdAt: createdDate,
@@ -130,6 +184,7 @@ extension LocalMeal {
     var asItem: MealItem {
         MealItem(
             source: .local(id),
+            mealType: mealType,
             foodName: foodName, calories: calories, protein: protein,
             carbs: carbs, fat: fat, confidence: confidence, note: note,
             createdAt: createdAt,
