@@ -1,5 +1,19 @@
 # CalSnap — Snap your meal, AI counts the calories 📸🍱
 
+<p align="center">
+  <a href="https://github.com/codewithmuh/calsnap/releases"><img src="https://img.shields.io/github/v/release/codewithmuh/calsnap?color=blue&label=version&style=flat-square" alt="GitHub Release"></a>
+  <a href="https://github.com/codewithmuh/calsnap/stargazers"><img src="https://img.shields.io/github/stars/codewithmuh/calsnap?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/codewithmuh/calsnap/network/members"><img src="https://img.shields.io/github/forks/codewithmuh/calsnap?style=flat-square" alt="Forks"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License: MIT"></a>
+  <a href="https://aiseekho.pk/courses/ios-app-with-claude"><img src="https://img.shields.io/badge/Free%20Course-aiseekho.pk-purple?style=flat-square" alt="Free Course"></a>
+  <a href="https://youtube.com/@codewithmuh"><img src="https://img.shields.io/badge/YouTube-%40codewithmuh-FF0000?style=flat-square&logo=youtube&logoColor=white" alt="YouTube"></a>
+  <br>
+  <img src="https://img.shields.io/badge/iOS-18%2B%20%7C%20SwiftUI-F05138?style=flat-square&logo=swift&logoColor=white" alt="SwiftUI iOS">
+  <img src="https://img.shields.io/badge/Backend-Django%205%20DRF-092E20?style=flat-square&logo=django&logoColor=white" alt="Django DRF">
+  <img src="https://img.shields.io/badge/AI%20Vision-Claude%20Sonnet%20Vision-D97706?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Vision">
+  <img src="https://img.shields.io/badge/Docker-Compose%20Ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
+</p>
+
 > **A full-stack AI calorie tracker.** Point your iPhone at a plate of food, and Claude vision identifies the meal, estimates calories + macros, and logs it to a daily tracker — all synced to a Django backend.
 
 CalSnap is a **Cal AI clone** built end-to-end with [Claude Code](https://claude.com/claude-code): a native **SwiftUI** iOS app talking to a **Django + DRF** API, with **Claude vision** doing the food recognition. The whole thing was built live, on stream.
@@ -38,14 +52,26 @@ This repo is the companion code for the full video course:
 
 ## 🏗️ Architecture
 
-```
-iOS App (SwiftUI)
-    │  HTTPS + JWT
-    ▼
-Django REST API
-    ├── PostgreSQL   users · meals
-    ├── Claude API   vision: image → { food, calories, protein_g, carbs_g, fat_g, confidence }
-    └── local media  meal photos
+```mermaid
+flowchart LR
+    subgraph Client["iOS Mobile Client (SwiftUI)"]
+        Cam["iPhone Camera / PhotosUI"] --> Snap["Meal Photo Capture"]
+        Snap --> Ring["Animated Calorie & Macro Ring"]
+    end
+
+    subgraph API["Backend Service (Django & DRF)"]
+        Snap -->|HTTPS Multipart / JWT| Endpoint["/api/meals/analyze/"]
+        Endpoint --> Prompt["Claude Vision Prompt Runner"]
+        Endpoint --> DB[(PostgreSQL 16)]
+        Endpoint --> Storage["Local Media Photos"]
+    end
+
+    subgraph AI["Anthropic AI Vision"]
+        Prompt -->|Image + Structured Prompt| Claude["Claude 3.5 Sonnet Vision"]
+        Claude -->|JSON: food, calories, protein, carbs, fat| Prompt
+    end
+
+    DB -->|Meal History & Trends| Ring
 ```
 
 **The heart of the app** is a single, readable prompt in [`backend/meals/claude.py`](backend/meals/claude.py) — it tells Claude to return strict JSON, which the backend parses, validates, and persists.
